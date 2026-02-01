@@ -1,28 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browser";
+import { supabaseBrowserOrNull } from "@/lib/supabase/browser";
 import ProductCard from "@/components/ProductCard";
 
-type Product = {
+type RecentProduct = {
   id: string;
   title: string | null;
   slug: string | null;
-  description: string | null;
-  price_cents: number | null;
-  currency: string | null;
   cover_image_path: string | null;
   created_at: string;
   coverUrl?: string | null;
 };
 
 export default function Home() {
-  const supabase = useMemo(() => supabaseBrowser(), []);
-  const [recent, setRecent] = useState<Product[]>([]);
+  const supabase = useMemo(() => supabaseBrowserOrNull(), []);
+  const [recent, setRecent] = useState<RecentProduct[]>([]);
   const [showSeeMore, setShowSeeMore] = useState(false);
   const [resourceCount, setResourceCount] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!supabase) return;
     const load = async () => {
       const { count, error: countErr } = await supabase
         .from("products")
@@ -47,9 +45,19 @@ export default function Home() {
 
       if (error) return;
 
-      const items = (data ?? []).map((p) => {
-        if (!p.cover_image_path) return { ...p, coverUrl: null };
-        const cleanPath = p.cover_image_path.replace(/^\/+/, "");
+      const items: RecentProduct[] = (data ?? []).map((p: any) => {
+        const base: RecentProduct = {
+          id: String(p.id),
+          title: p.title ?? null,
+          slug: p.slug ?? null,
+          cover_image_path: p.cover_image_path ?? null,
+          created_at: String(p.created_at),
+          coverUrl: null,
+        };
+
+        if (!base.cover_image_path) return base;
+
+        const cleanPath = base.cover_image_path.replace(/^\/+/, "");
         const { data: urlData } = supabase.storage
           .from("assets")
           .getPublicUrl(cleanPath);
@@ -62,7 +70,7 @@ export default function Home() {
             coverUrl,
           });
         }
-        return { ...p, coverUrl };
+        return { ...base, coverUrl };
       });
 
       setRecent(items);
@@ -130,7 +138,7 @@ export default function Home() {
           const showTwoRows = showCount > 5;
           const row1 = recent.slice(0, Math.min(5, showCount));
           const row2 = showTwoRows ? recent.slice(5, showCount) : [];
-          const renderRow = (items: Product[]) => (
+          const renderRow = (items: RecentProduct[]) => (
             <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-5">
               {items.map((product) => {
                 const title = product?.title ?? "Worksheet Title";

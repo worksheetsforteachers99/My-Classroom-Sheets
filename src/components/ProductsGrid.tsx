@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browser";
+import { supabaseBrowserOrNull } from "@/lib/supabase/browser";
 import ProductCard from "@/components/ProductCard";
 
 type Product = {
@@ -29,7 +29,7 @@ export default function ProductsGrid({
   onPageChange,
   onCountChange,
 }: ProductsGridProps) {
-  const supabase = useMemo(() => supabaseBrowser(), []);
+  const supabase = useMemo(() => supabaseBrowserOrNull(), []);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -39,6 +39,7 @@ export default function ProductsGrid({
 
   const withCoverUrls = useCallback(
     (rows: Product[]) => {
+      if (!supabase) return rows;
       return rows.map((p) => {
         if (!p.cover_image_path) return { ...p, coverUrl: null };
         const cleanPath = p.cover_image_path.replace(/^\/+/, "");
@@ -52,6 +53,7 @@ export default function ProductsGrid({
   );
 
   const fetchMatchedIds = useCallback(async () => {
+    if (!supabase) return null;
     const activeGroups = Object.entries(filters).filter(([, vals]) => vals.length > 0);
     if (activeGroups.length === 0) return null;
 
@@ -65,13 +67,18 @@ export default function ProductsGrid({
 
       if (ptErr) throw ptErr;
 
-      const ids = new Set((data ?? []).map((row) => row.product_id));
+      const rows = (data ?? []) as Array<{ product_id: string }>;
+      const ids = new Set<string>(rows.map((row) => row.product_id));
       if (ids.size === 0) return [];
 
       if (current === null) {
         current = ids;
       } else {
-        current = new Set([...current].filter((id) => ids.has(id)));
+        const next = new Set<string>();
+        for (const id of current) {
+          if (ids.has(id)) next.add(id);
+        }
+        current = next;
       }
     }
 
@@ -80,6 +87,15 @@ export default function ProductsGrid({
 
   const fetchProducts = useCallback(
     async (nextPage: number, reset: boolean) => {
+      if (!supabase) {
+        setProducts([]);
+        setHasMore(false);
+        setLoading(false);
+        setLoadingMore(false);
+        setError("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+        onCountChange(0);
+        return;
+      }
       const requestId = ++requestIdRef.current;
       if (reset) {
         setLoading(true);
@@ -161,6 +177,10 @@ export default function ProductsGrid({
   }, [page, fetchProducts]);
 
   const handleDownload = async (pdfPath: string) => {
+    if (!supabase) {
+      setError("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
     const cleanPath = pdfPath.replace(/^\/+/, "");
     const { data: signedData, error: signedErr } = await supabase.storage
       .from("assets")

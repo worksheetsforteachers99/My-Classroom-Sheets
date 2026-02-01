@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browser";
+import { supabaseBrowserOrNull } from "@/lib/supabase/browser";
 import Modal from "@/components/ui/Modal";
 
 type AuthMode = "login" | "signup";
@@ -19,7 +19,7 @@ export default function AuthModal({
   onClose,
   onSwitchMode,
 }: AuthModalProps) {
-  const supabase = useMemo(() => supabaseBrowser(), []);
+  const supabase = useMemo(() => supabaseBrowserOrNull(), []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -55,6 +55,11 @@ export default function AuthModal({
     e.preventDefault();
     if (loading) return;
 
+    if (!supabase) {
+      setError("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
+
     resetMessages();
     setLoading(true);
 
@@ -81,6 +86,12 @@ export default function AuthModal({
       setLoading(false);
       setShowResend(false);
       handleClose();
+
+              {!supabase && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  Supabase env vars are missing. Add them to <code>.env.local</code> and restart the dev server.
+                </div>
+              )}
       return;
     }
 
@@ -129,6 +140,14 @@ export default function AuthModal({
       setResendStatus("Enter your email above to resend.");
       return;
     }
+
+    if (!supabase) {
+      setResendStatus(
+        "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
+      );
+      return;
+    }
+
     setResendStatus(null);
     const { error: resendErr } = await supabase.auth.resend({
       type: "signup",

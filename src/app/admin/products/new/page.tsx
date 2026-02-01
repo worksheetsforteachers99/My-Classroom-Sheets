@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browser";
+import { supabaseBrowserOrNull } from "@/lib/supabase/browser";
 import { isAdminUser } from "@/lib/admin/guard";
 
 type TagGroup = { id: string; name: string; slug: string; sort_order: number };
@@ -24,7 +24,7 @@ function slugify(input: string) {
 }
 
 export default function AdminNewProductPage() {
-  const supabase = useMemo(() => supabaseBrowser(), []);
+  const supabase = useMemo(() => supabaseBrowserOrNull(), []);
 
   const [guard, setGuard] = useState<{ ok: boolean; reason?: string } | null>(null);
 
@@ -76,6 +76,15 @@ export default function AdminNewProductPage() {
     const init = async () => {
       setLoading(true);
       setMessage(null);
+
+      if (!supabase) {
+        setGuard({
+          ok: false,
+          reason: "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        });
+        setLoading(false);
+        return;
+      }
 
       const g = await isAdminUser();
       setGuard(g);
@@ -135,6 +144,12 @@ export default function AdminNewProductPage() {
   const saveProduct = async () => {
     setSaving(true);
     setMessage(null);
+
+    if (!supabase) {
+      setMessage("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      setSaving(false);
+      return;
+    }
 
     const coverTypeToExt: Record<string, string> = {
       "image/jpeg": "jpg",

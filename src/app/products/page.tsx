@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browser";
+import { supabaseBrowserOrNull } from "@/lib/supabase/browser";
 import FiltersSidebar from "@/components/FiltersSidebar";
 import ProductsTabs from "@/components/ProductsTabs";
 import ProductsGrid from "@/components/ProductsGrid";
@@ -25,7 +25,7 @@ type Tag = {
 const GROUP_SLUGS = ["type", "grade-level", "subject", "framework"] as const;
 
 export default function ProductsPage() {
-  const supabase = useMemo(() => supabaseBrowser(), []);
+  const supabase = useMemo(() => supabaseBrowserOrNull(), []);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +57,10 @@ export default function ProductsPage() {
   }, [tags]);
 
   useEffect(() => {
+    if (!supabase) {
+      setError("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
     const init = async () => {
       const { data: gData, error: gErr } = await supabase
         .from("tag_groups")

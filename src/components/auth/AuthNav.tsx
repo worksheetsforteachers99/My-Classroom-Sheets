@@ -2,18 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { supabaseBrowser } from "@/lib/supabase/browser";
+import { supabaseBrowserOrNull } from "@/lib/supabase/browser";
 import AuthModal from "@/components/auth/AuthModal";
 
 type AuthMode = "login" | "signup";
 
 export default function AuthNav() {
-  const supabase = useMemo(() => supabaseBrowser(), []);
+  const supabase = useMemo(() => supabaseBrowserOrNull(), []);
   const [session, setSession] = useState<Session | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<AuthMode>("login");
 
   useEffect(() => {
+    if (!supabase) return;
     let isMounted = true;
 
     const init = async () => {
@@ -62,7 +63,7 @@ export default function AuthNav() {
         <button
           className="rounded-full border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-100"
           type="button"
-          onClick={() => supabase.auth.signOut()}
+          onClick={() => supabase?.auth.signOut()}
         >
           Sign out
         </button>

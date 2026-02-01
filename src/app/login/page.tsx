@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browser";
+import { useMemo, useState } from "react";
+import { supabaseBrowserOrNull } from "@/lib/supabase/browser";
 
 export default function LoginPage() {
-  const supabase = supabaseBrowser();
+  const supabase = useMemo(() => supabaseBrowserOrNull(), []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -12,6 +12,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const signUp = async () => {
+    if (!supabase) {
+      setMsg("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
     setLoading(true);
     setMsg(null);
 
@@ -23,6 +27,10 @@ export default function LoginPage() {
   };
 
   const signIn = async () => {
+    if (!supabase) {
+      setMsg("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
     setLoading(true);
     setMsg(null);
 
@@ -34,6 +42,10 @@ export default function LoginPage() {
   };
 
   const signOut = async () => {
+    if (!supabase) {
+      setMsg("Supabase is not configured.");
+      return;
+    }
     await supabase.auth.signOut();
     setMsg("Signed out");
   };
