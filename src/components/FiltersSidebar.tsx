@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type TagGroup = {
   id: string;
@@ -18,7 +19,6 @@ type Tag = {
 type FiltersSidebarProps = {
   tagGroups: TagGroup[];
   tagsByGroup: Record<string, Tag[]>;
-  onFiltersChange: (next: Record<string, string[]>) => void;
 };
 
 const placeholderByGroup: Record<string, string> = {
@@ -41,29 +41,20 @@ const parseList = (value: string | null) => {
 export default function FiltersSidebar({
   tagGroups,
   tagsByGroup,
-  onFiltersChange,
 }: FiltersSidebarProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Record<string, string[]>>({
-    type: [],
-    "grade-level": [],
-    subject: [],
-    framework: [],
-  });
-
-  useEffect(() => {
-    const params = new URLSearchParams(typeof location !== "undefined" ? location.search : "");
-    const initial: Record<string, string[]> = {
+  const selected = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    return {
       type: parseList(params.get("type")),
       "grade-level": parseList(params.get("grade-level")),
       subject: parseList(params.get("subject")),
       framework: parseList(params.get("framework")),
     };
-    setSelected(initial);
-    onFiltersChange(initial);
-    // read once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   const hasActive = useMemo(
     () => Object.values(selected).some((vals) => vals.length > 0),
@@ -79,20 +70,18 @@ export default function FiltersSidebar({
   };
 
   const updateQuery = (next: Record<string, string[]>) => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString());
     for (const key of GROUP_KEYS) {
       const vals = next[key] ?? [];
-      if (vals.length > 0) params.set(key, vals.join(","));
+      if (vals.length > 0) {
+        params.set(key, vals.join(","));
+      } else {
+        params.delete(key);
+      }
     }
     const query = params.toString();
-    const url = query ? `/products?${query}` : "/products";
-    window.history.replaceState(null, "", url);
-  };
-
-  const updateFilters = (next: Record<string, string[]>) => {
-    setSelected(next);
-    onFiltersChange(next);
-    updateQuery(next);
+    const url = query ? `${pathname}?${query}` : pathname;
+    router.replace(url, { scroll: false });
   };
 
   const toggleTag = (groupSlug: string, tagId: string) => {
@@ -104,7 +93,7 @@ export default function FiltersSidebar({
       current.add(tagId);
     }
     next[groupSlug] = Array.from(current);
-    updateFilters(next);
+    updateQuery(next);
   };
 
   const clearFilters = () => {
@@ -114,7 +103,7 @@ export default function FiltersSidebar({
       subject: [],
       framework: [],
     };
-    updateFilters(next);
+    updateQuery(next);
   };
 
   return (
@@ -137,18 +126,28 @@ export default function FiltersSidebar({
           const list = tagsByGroup[g.slug] ?? [];
           const isOpen = openGroup === g.slug;
           return (
-            <div key={g.id} className="rounded-xl border border-slate-200">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between px-4 py-3 text-left text-sm"
-                onClick={() => setOpenGroup(isOpen ? null : g.slug)}
-              >
-                <span className="font-semibold text-slate-900">{g.name}</span>
-                <span className="flex items-center gap-2 text-slate-500">
-                  <span className="truncate">{selectedLabel(g.slug, list)}</span>
+            <div key={g.id} className="rounded-xl border border-slate-200 bg-white">
+              <div className="px-4 pb-4 pt-3">
+                <label
+                  className="text-xs font-medium uppercase tracking-wide text-slate-500"
+                  htmlFor={`filter-${g.slug}`}
+                >
+                  {g.name}
+                </label>
+                <div className="relative mt-2">
+                  <button
+                    id={`filter-${g.slug}`}
+                    type="button"
+                    className="flex h-12 w-full items-center rounded-xl border border-slate-200 bg-white px-4 pr-10 text-left text-sm text-slate-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:border-blue-400 hover:border-slate-300"
+                    onClick={() => setOpenGroup(isOpen ? null : g.slug)}
+                    aria-expanded={isOpen}
+                    aria-controls={`filter-panel-${g.slug}`}
+                  >
+                    <span className="truncate">{selectedLabel(g.slug, list)}</span>
+                  </button>
                   <svg
                     viewBox="0 0 24 24"
-                    className="h-4 w-4"
+                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
@@ -158,10 +157,13 @@ export default function FiltersSidebar({
                   >
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
-                </span>
-              </button>
+                </div>
+              </div>
               {isOpen && (
-                <div className="border-t border-slate-200 px-4 py-3">
+                <div
+                  id={`filter-panel-${g.slug}`}
+                  className="border-t border-slate-200 px-4 py-3"
+                >
                   <div className="space-y-2">
                     {list.map((t) => {
                       const checked = (selected[g.slug] ?? []).includes(t.id);

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import ProductCard from "@/components/ProductCard";
+import { downloadProductPdf } from "@/lib/downloads/downloadProductPdf";
 
 type Product = {
   id: string;
@@ -12,6 +13,7 @@ type Product = {
   price_cents: number | null;
   currency: string | null;
   cover_image_path: string | null;
+  pdf_path: string | null;
   created_at: string;
   coverUrl?: string | null;
 };
@@ -21,6 +23,7 @@ export default function Home() {
   const [recent, setRecent] = useState<Product[]>([]);
   const [showSeeMore, setShowSeeMore] = useState(false);
   const [resourceCount, setResourceCount] = useState<number | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -39,7 +42,7 @@ export default function Home() {
 
       const { data, error } = await supabase
         .from("products")
-        .select("id,title,slug,cover_image_path,created_at,status,is_active")
+        .select("id,title,slug,cover_image_path,pdf_path,created_at,status,is_active")
         .eq("is_active", true)
         .eq("status", "published")
         .order("created_at", { ascending: false })
@@ -51,7 +54,7 @@ export default function Home() {
         if (!p.cover_image_path) return { ...p, coverUrl: null };
         const cleanPath = p.cover_image_path.replace(/^\/+/, "");
         const { data: urlData } = supabase.storage
-          .from("assets")
+          .from("product-covers")
           .getPublicUrl(cleanPath);
         const coverUrl = urlData.publicUrl;
         if (process.env.NODE_ENV !== "production") {
@@ -71,6 +74,25 @@ export default function Home() {
 
     load();
   }, [supabase]);
+
+  const handleDownload = async (product: Product) => {
+    if (!product.pdf_path || downloadingId === product.id) return;
+    setDownloadingId(product.id);
+
+    try {
+      const filename = `${product.slug || product.title || product.id}.pdf`;
+      await downloadProductPdf({
+        supabase,
+        pdfPath: product.pdf_path,
+        filename,
+      });
+    } catch (err) {
+      console.log("PDF download error", { pdf_path: product.pdf_path, error: err });
+      alert("Could not download file.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -143,8 +165,15 @@ export default function Home() {
                     title={title}
                     slug={slug}
                     coverUrl={coverUrl}
-                    actionLabel="Download"
-                    actionHref={slug ? `/products/${slug}` : "/products"}
+                    actionLabel={
+                      downloadingId === product.id
+                        ? "Preparing..."
+                        : product.pdf_path
+                          ? "Download"
+                          : "No file"
+                    }
+                    actionDisabled={downloadingId === product.id || !product.pdf_path}
+                    onActionClick={product.pdf_path ? () => handleDownload(product) : undefined}
                   />
                 );
               })}

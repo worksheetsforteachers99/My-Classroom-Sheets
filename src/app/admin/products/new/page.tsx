@@ -187,7 +187,7 @@ export default function AdminNewProductPage() {
 
     const productId = inserted.id as string;
 
-    // 1.5) upload cover image (optional) to storage bucket: assets
+    // 1.5) upload cover image (optional) to storage bucket: product-covers
     if (coverFile) {
       const coverExt = coverTypeToExt[coverFile.type];
       if (!coverExt) {
@@ -199,16 +199,20 @@ export default function AdminNewProductPage() {
       const coverPath = `covers/${productId}.${coverExt}`;
       const { data: sess } = await supabase.auth.getSession();
       console.log("=== COVER UPLOAD DEBUG ===");
-      console.log("bucket:", "assets");
-      console.log("coverPath:", coverPath);
-      console.log("coverType:", coverFile.type, "name:", coverFile.name);
-      console.log("session?", !!sess.session, "uid:", sess.session?.user?.id);
+      console.log("UPLOAD COVER", {
+        bucket: "product-covers",
+        path: coverPath,
+        uid: sess.session?.user?.id,
+        hasSession: !!sess.session,
+        fileType: coverFile.type,
+        fileName: coverFile.name,
+      });
       // TEMP DEBUG TOGGLE: set to true to test insert-only (upsert: false).
       // After testing, set back to false to use upsert: true.
       const debugNoUpsert = false;
 
       const { error: coverUploadErr } = await supabase.storage
-        .from("assets")
+        .from("product-covers")
         .upload(coverPath, coverFile, {
           contentType: coverFile.type,
           upsert: !debugNoUpsert,
@@ -216,9 +220,6 @@ export default function AdminNewProductPage() {
 
       if (coverUploadErr) {
         console.log("coverUploadErr (full):", coverUploadErr);
-      }
-
-      if (coverUploadErr) {
         setMessage(`Product created, but thumbnail upload failed: ${coverUploadErr.message}`);
         setSaving(false);
         return;
@@ -238,7 +239,7 @@ export default function AdminNewProductPage() {
       }
     }
 
-    // 2) upload PDF (optional) to storage bucket: assets
+    // 2) upload PDF (optional) to storage bucket: product-files
     if (pdfFile) {
       // Basic client-side validation
       if (pdfFile.type !== "application/pdf") {
@@ -247,17 +248,21 @@ export default function AdminNewProductPage() {
         return;
       }
 
-      const filePath = `pdfs/${productId}.pdf`;
+      const filePath = `products/${productId}.pdf`;
 
       const { data: sess2 } = await supabase.auth.getSession();
       console.log("=== PDF UPLOAD DEBUG ===");
-      console.log("bucket:", "assets");
-      console.log("filePath:", filePath);
-      console.log("pdfType:", pdfFile.type, "name:", pdfFile.name);
-      console.log("session?", !!sess2.session, "uid:", sess2.session?.user?.id);
+      console.log("UPLOAD PDF", {
+        bucket: "product-files",
+        path: filePath,
+        uid: sess2.session?.user?.id,
+        hasSession: !!sess2.session,
+        fileType: pdfFile.type,
+        fileName: pdfFile.name,
+      });
 
       const { error: uploadErr } = await supabase.storage
-        .from("assets")
+        .from("product-files")
         .upload(filePath, pdfFile, {
           contentType: "application/pdf",
           upsert: true,

@@ -49,10 +49,6 @@ export default function ProductCard({
         <div className="line-clamp-2 text-base font-semibold text-slate-900">
           {title}
         </div>
-        {process.env.NODE_ENV !== "production" && coverUrl && (
-          <div className="mt-1 truncate text-[10px] text-slate-400">{coverUrl}</div>
-        )}
-
         <div className="mt-4">
           {actionDisabled ? (
             <button type="button" className={buttonClasses} disabled>
