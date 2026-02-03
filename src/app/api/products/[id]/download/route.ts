@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-type Params = {
-  params: {
-    id: string;
-  };
-};
+type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, ctx: Params) {
+  const { id } = await ctx.params;
   const authHeader = _req.headers.get("authorization") ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
@@ -33,7 +30,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { data: product, error: productErr } = await supabase
     .from("products")
     .select("pdf_path")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (productErr) {

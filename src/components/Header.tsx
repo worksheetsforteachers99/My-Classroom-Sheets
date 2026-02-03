@@ -1,12 +1,49 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import AuthNav from "@/components/auth/AuthNav";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 export default function Header() {
+  const { isAdmin, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [searchValue, setSearchValue] = useState("");
+
+  useEffect(() => {
+    if (!pathname.startsWith("/products")) return;
+    const next = searchParams.get("q") ?? "";
+    setSearchValue(next);
+  }, [pathname, searchParams]);
+
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const term = searchValue.trim();
+    if (pathname.startsWith("/products")) {
+      const params = new URLSearchParams(searchParams.toString());
+      if (term) {
+        params.set("q", term);
+      } else {
+        params.delete("q");
+      }
+      const next = params.toString();
+      router.push(next ? `/products?${next}` : "/products");
+      return;
+    }
+
+    if (term) {
+      router.push(`/products?q=${encodeURIComponent(term)}`);
+    } else {
+      router.push("/products");
+    }
+  };
+
   return (
-    <header className="h-auto border-b border-slate-200 bg-white">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 md:h-[72px] md:flex-row md:items-center md:justify-between md:py-0">
+    <header className="fixed inset-x-0 top-0 z-50 h-44 border-b border-slate-200 bg-white md:h-20">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 md:h-20 md:flex-row md:items-center md:justify-between md:py-0">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
@@ -21,14 +58,20 @@ export default function Header() {
         </div>
 
         <div className="w-full md:flex-1 md:px-8">
-          <div className="relative mx-auto w-full max-w-[720px]">
+          <form
+            className="relative mx-auto w-full max-w-[720px]"
+            onSubmit={handleSearchSubmit}
+          >
             <input
               className="w-full rounded-full bg-slate-100 px-5 py-3 pr-12 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-300"
               placeholder="Search worksheets, topics, or grade"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
             />
             <button
-              type="button"
+              type="submit"
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50"
+              aria-label="Search"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -44,7 +87,7 @@ export default function Header() {
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </button>
-          </div>
+          </form>
         </div>
 
         <div className="hidden items-center gap-5 text-sm md:flex">
@@ -54,6 +97,14 @@ export default function Header() {
           <a className="text-slate-600 hover:text-slate-900" href="/bundles">
             Bundles
           </a>
+          {!loading && isAdmin ? (
+            <a
+              className="rounded-full border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-100"
+              href="/admin/products"
+            >
+              Product Manager
+            </a>
+          ) : null}
           <a
             className="rounded-full bg-slate-900 px-5 py-2 text-white hover:bg-slate-800"
             href="/products"
@@ -70,6 +121,11 @@ export default function Header() {
           <a className="text-slate-600" href="/bundles">
             Bundles
           </a>
+          {!loading && isAdmin ? (
+            <a className="text-slate-600" href="/admin/products">
+              Product Manager
+            </a>
+          ) : null}
           <a className="text-slate-600" href="/products">
             Browse
           </a>

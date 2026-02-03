@@ -28,7 +28,8 @@ const placeholderByGroup: Record<string, string> = {
   framework: "Select Framework",
 };
 
-const GROUP_KEYS = ["type", "grade-level", "subject", "framework"];
+const GROUP_KEYS = ["type", "grade-level", "subject", "framework"] as const;
+type GroupKey = (typeof GROUP_KEYS)[number];
 
 const parseList = (value: string | null) => {
   if (!value) return [];
@@ -46,7 +47,7 @@ export default function FiltersSidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const selected = useMemo(() => {
+  const selected = useMemo<Record<GroupKey, string[]>>(() => {
     const params = new URLSearchParams(searchParams.toString());
     return {
       type: parseList(params.get("type")),
@@ -61,7 +62,7 @@ export default function FiltersSidebar({
     [selected]
   );
 
-  const selectedLabel = (groupSlug: string, list: Tag[]) => {
+  const selectedLabel = (groupSlug: GroupKey, list: Tag[]) => {
     const selectedIds = new Set(selected[groupSlug] ?? []);
     const names = list.filter((t) => selectedIds.has(t.id)).map((t) => t.name);
     if (names.length === 0) return placeholderByGroup[groupSlug] ?? "Select";
@@ -69,7 +70,7 @@ export default function FiltersSidebar({
     return joined.length > 24 ? `${joined.slice(0, 24)}…` : joined;
   };
 
-  const updateQuery = (next: Record<string, string[]>) => {
+  const updateQuery = (next: Record<GroupKey, string[]>) => {
     const params = new URLSearchParams(searchParams.toString());
     for (const key of GROUP_KEYS) {
       const vals = next[key] ?? [];
@@ -84,7 +85,7 @@ export default function FiltersSidebar({
     router.replace(url, { scroll: false });
   };
 
-  const toggleTag = (groupSlug: string, tagId: string) => {
+  const toggleTag = (groupSlug: GroupKey, tagId: string) => {
     const next = { ...selected };
     const current = new Set(next[groupSlug] ?? []);
     if (current.has(tagId)) {
@@ -123,7 +124,8 @@ export default function FiltersSidebar({
 
       <div className="mt-6 space-y-4">
         {tagGroups.map((g) => {
-          const list = tagsByGroup[g.slug] ?? [];
+          const groupSlug = g.slug as GroupKey;
+          const list = tagsByGroup[groupSlug] ?? [];
           const isOpen = openGroup === g.slug;
           return (
             <div key={g.id} className="rounded-xl border border-slate-200 bg-white">
@@ -143,7 +145,9 @@ export default function FiltersSidebar({
                     aria-expanded={isOpen}
                     aria-controls={`filter-panel-${g.slug}`}
                   >
-                    <span className="truncate">{selectedLabel(g.slug, list)}</span>
+                    <span className="truncate">
+                      {selectedLabel(groupSlug, list)}
+                    </span>
                   </button>
                   <svg
                     viewBox="0 0 24 24"
@@ -166,13 +170,13 @@ export default function FiltersSidebar({
                 >
                   <div className="space-y-2">
                     {list.map((t) => {
-                      const checked = (selected[g.slug] ?? []).includes(t.id);
+                      const checked = (selected[groupSlug] ?? []).includes(t.id);
                       return (
                         <label key={t.id} className="flex items-center gap-2 text-sm text-slate-700">
                           <input
                             type="checkbox"
                             checked={checked}
-                            onChange={() => toggleTag(g.slug, t.id)}
+                            onChange={() => toggleTag(groupSlug, t.id)}
                             className="h-4 w-4 rounded border-slate-300 text-teal-600"
                           />
                           <span>{t.name}</span>

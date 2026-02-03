@@ -11,6 +11,7 @@ type AuthModalProps = {
   mode: AuthMode;
   onClose: () => void;
   onSwitchMode: (mode: AuthMode) => void;
+  onAuthSuccess?: () => void | Promise<void>;
 };
 
 export default function AuthModal({
@@ -18,6 +19,7 @@ export default function AuthModal({
   mode,
   onClose,
   onSwitchMode,
+  onAuthSuccess,
 }: AuthModalProps) {
   const supabase = useMemo(() => supabaseBrowser(), []);
   const [email, setEmail] = useState("");
@@ -43,6 +45,13 @@ export default function AuthModal({
     setLoading(false);
     resetMessages();
     onClose();
+  };
+
+  const handleSuccess = async () => {
+    if (onAuthSuccess) {
+      await onAuthSuccess();
+    }
+    handleClose();
   };
 
   useEffect(() => {
@@ -80,7 +89,7 @@ export default function AuthModal({
 
       setLoading(false);
       setShowResend(false);
-      handleClose();
+      await handleSuccess();
       return;
     }
 
@@ -116,7 +125,7 @@ export default function AuthModal({
       }
 
       setLoading(false);
-      handleClose();
+      await handleSuccess();
       return;
     }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { isAdminUser } from "@/lib/admin/guard";
 
@@ -25,6 +26,7 @@ function slugify(input: string) {
 
 export default function AdminNewProductPage() {
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const router = useRouter();
 
   const [guard, setGuard] = useState<{ ok: boolean; reason?: string } | null>(null);
 
@@ -317,6 +319,7 @@ export default function AdminNewProductPage() {
     if (coverInputRef.current) coverInputRef.current.value = "";
 
     setSaving(false);
+    router.push("/admin/products");
   };
 
   if (loading) return <div>Loading…</div>;

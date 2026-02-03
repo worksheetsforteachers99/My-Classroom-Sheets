@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import ProductCard from "@/components/ProductCard";
-import { downloadProductPdf } from "@/lib/downloads/downloadProductPdf";
+import ProductGridSkeleton from "@/components/skeletons/ProductGridSkeleton";
+import GatedDownloadButton from "@/components/products/GatedDownloadButton";
 
 type Product = {
   id: string;
@@ -12,6 +13,8 @@ type Product = {
   slug: string;
   cover_image_path: string | null;
   pdf_path: string | null;
+  price_cents?: number | null;
+  currency?: string | null;
   created_at: string;
   updated_at?: string | null;
   coverUrl?: string | null;
@@ -46,6 +49,8 @@ export default function ProductsGrid({
   onBundleCountChange,
 }: ProductsGridProps) {
   const supabase = useMemo(() => supabaseBrowser(), []);
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [page, setPage] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
@@ -53,7 +58,6 @@ export default function ProductsGrid({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const requestIdRef = useRef(0);
   const filters = useMemo(() => {
@@ -65,18 +69,23 @@ export default function ProductsGrid({
       framework: parseList(params.get("framework")),
     };
   }, [searchParams]);
+  const queryText = useMemo(
+    () => searchParams.get("q")?.trim() ?? "",
+    [searchParams]
+  );
 
   const filtersKey = useMemo(
-    () => GROUP_KEYS.map((key) => (filters[key] ?? []).join(",")).join("|"),
-    [filters]
+    () =>
+      `${GROUP_KEYS.map((key) => (filters[key] ?? []).join(",")).join("|")}::${queryText}`,
+    [filters, queryText]
   );
+
+  const statusFilter = "published";
+  const isActiveFilter = true;
 
   const withCoverUrls = useCallback(
     (rows: Product[]) => {
       return rows.map((p) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.log("[product-cover-debug]", p);
-        }
         if (!p.cover_image_path) return { ...p, coverUrl: null };
         const cleanPath = p.cover_image_path.replace(/^\/+/, "");
         const { data: urlData } = supabase.storage
@@ -90,33 +99,6 @@ export default function ProductsGrid({
     [supabase]
   );
 
-  const fetchMatchedIds = useCallback(async () => {
-    const activeGroups = Object.entries(filters).filter(([, vals]) => vals.length > 0);
-    if (activeGroups.length === 0) return null;
-
-    let current: Set<string> | null = null;
-
-    for (const [, vals] of activeGroups) {
-      const { data, error: ptErr } = await supabase
-        .from("product_tags")
-        .select("product_id, tag_id")
-        .in("tag_id", vals);
-
-      if (ptErr) throw ptErr;
-
-      const ids = new Set((data ?? []).map((row) => row.product_id));
-      if (ids.size === 0) return [];
-
-      if (current === null) {
-        current = ids;
-      } else {
-        current = new Set([...current].filter((id) => ids.has(id)));
-      }
-    }
-
-    return current ? Array.from(current) : null;
-  }, [filters, supabase]);
-
   const fetchProducts = useCallback(
     async (nextPage: number, reset: boolean) => {
       const requestId = ++requestIdRef.current;
@@ -129,53 +111,37 @@ export default function ProductsGrid({
       setError(null);
 
       try {
-        const matchedIds = await fetchMatchedIds();
-        if (requestId !== requestIdRef.current) return;
-
-        if (matchedIds && matchedIds.length === 0) {
-          setProducts([]);
-          onWorksheetCountChange(0);
-          setHasMore(false);
-          setLoading(false);
-          setLoadingMore(false);
-          return;
-        }
-
-        let countQuery = supabase
-          .from("products")
-          .select("id", { count: "exact", head: true })
-          .eq("is_active", true)
-          .eq("status", "published");
-
-        if (matchedIds) {
-          countQuery = countQuery.in("id", matchedIds);
-        }
-
-        const { count, error: countErr } = await countQuery;
-        if (countErr) throw countErr;
-        if (requestId !== requestIdRef.current) return;
-
-        const total = count ?? 0;
-        onWorksheetCountChange(total);
-
-        let query = supabase
-          .from("products")
-          .select("id,title,slug,cover_image_path,pdf_path,created_at,updated_at")
-          .eq("is_active", true)
-          .eq("status", "published")
-          .order("created_at", { ascending: false });
-
-        if (matchedIds) {
-          query = query.in("id", matchedIds);
-        }
-
         const from = nextPage * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
-        const { data, error: pErr } = await query.range(from, to);
-        if (pErr) throw pErr;
+        const params = new URLSearchParams();
+        params.set("page", String(nextPage));
+        params.set("pageSize", String(PAGE_SIZE));
+        params.set("status", statusFilter);
+        params.set("is_active", isActiveFilter ? "true" : "false");
+
+        for (const [key, vals] of Object.entries(filters)) {
+          if (vals.length > 0) {
+            params.set(key, vals.join(","));
+          }
+        }
+        if (queryText) {
+          params.set("q", queryText);
+        }
+
+        const res = await fetch(`/api/products?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(json?.error ?? "Failed to load products");
+        }
+
         if (requestId !== requestIdRef.current) return;
 
-        const nextItems = withCoverUrls((data ?? []) as Product[]);
+        const total = Number(json?.count ?? 0);
+        const rows = (json?.products ?? []) as Product[];
+
+        onWorksheetCountChange(total);
+        const nextItems = withCoverUrls(rows);
         setProducts((prev) => (reset ? nextItems : [...prev, ...nextItems]));
         setHasMore(from + nextItems.length < total);
       } catch (err: any) {
@@ -186,7 +152,7 @@ export default function ProductsGrid({
         setLoadingMore(false);
       }
     },
-    [fetchMatchedIds, onWorksheetCountChange, supabase, withCoverUrls]
+    [filters, onWorksheetCountChange, statusFilter, isActiveFilter, withCoverUrls, queryText]
   );
 
   useEffect(() => {
@@ -215,25 +181,6 @@ export default function ProductsGrid({
     setLoading(false);
   }, [tab, onBundleCountChange]);
 
-  const handleDownload = async (product: Product) => {
-    if (!product.pdf_path || downloadingId === product.id) return;
-    setDownloadingId(product.id);
-
-    try {
-      const filename = `${product.slug || product.title || product.id}.pdf`;
-      await downloadProductPdf({
-        supabase,
-        pdfPath: product.pdf_path,
-        filename,
-      });
-    } catch (err) {
-      console.log("PDF download error", { pdf_path: product.pdf_path, error: err });
-      alert("Could not download file.");
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
   if (error) return <div className="text-red-600">Error: {error}</div>;
 
   const showLoading = loading && tab === "worksheets";
@@ -241,14 +188,7 @@ export default function ProductsGrid({
   return (
     <div>
       {showLoading ? (
-        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, idx) => (
-            <div
-              key={`skeleton-${idx}`}
-              className="h-[360px] rounded-2xl border border-slate-200 bg-white shadow-sm"
-            />
-          ))}
-        </div>
+        <ProductGridSkeleton count={8} />
       ) : tab === "bundles" ? (
         bundles.length === 0 ? (
           <div className="rounded-xl border border-slate-200 bg-white p-10 text-center">
@@ -297,8 +237,30 @@ export default function ProductsGrid({
           </div>
         )
       ) : products.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          No products match your filters.
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700">
+          {queryText ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>No results for “{queryText}”.</div>
+              <button
+                type="button"
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.delete("q");
+                  const next = params.toString();
+                  router.replace(next ? `${pathname}?${next}` : pathname, {
+                    scroll: false,
+                  });
+                }}
+                className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Clear search
+              </button>
+            </div>
+          ) : Object.values(filters).some((vals) => vals.length > 0) ? (
+            "No products match your filters."
+          ) : (
+            "No published resources yet. Publish a product in admin to show it here."
+          )}
         </div>
       ) : (
         <>
@@ -310,11 +272,17 @@ export default function ProductsGrid({
                 title={p.title}
                 slug={p.slug}
                 coverUrl={p.coverUrl ?? null}
-                actionLabel={
-                  downloadingId === p.id ? "Preparing..." : p.pdf_path ? "Download" : "No file"
+                priceCents={p.price_cents ?? null}
+                currency={p.currency ?? null}
+                actionElement={
+                  <GatedDownloadButton
+                    productId={p.id}
+                    slug={p.slug}
+                    pdfPath={p.pdf_path}
+                    title={p.title}
+                    className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+                  />
                 }
-                actionDisabled={downloadingId === p.id || !p.pdf_path}
-                onActionClick={p.pdf_path ? () => handleDownload(p) : undefined}
               />
             ))}
           </div>

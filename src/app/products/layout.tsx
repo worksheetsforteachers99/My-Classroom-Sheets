@@ -47,7 +47,7 @@ const getFiltersData = cache(async () => {
   }
 
   const tagGroups = (gData ?? []).filter((g) => GROUP_SLUGS.includes(g.slug as any));
-  const tags = (tData as Tag[]) ?? [];
+  const tags = (tData as unknown as Tag[]) ?? [];
 
   const tagsByGroup: Record<string, Tag[]> = {};
   for (const t of tags) {
@@ -65,9 +65,18 @@ const getFiltersData = cache(async () => {
 
 export default async function ProductsLayout({
   children,
+  params,
 }: Readonly<{
   children: React.ReactNode;
+  params: Promise<{ slug?: string }>;
 }>) {
+  const resolvedParams = await params;
+  if (resolvedParams?.slug) {
+    return (
+      <div className="min-h-screen bg-slate-50">{children}</div>
+    );
+  }
+
   const { tagGroups, tagsByGroup } = await getFiltersData();
 
   return (

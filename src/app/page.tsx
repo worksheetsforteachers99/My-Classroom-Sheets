@@ -3,15 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import ProductCard from "@/components/ProductCard";
-import { downloadProductPdf } from "@/lib/downloads/downloadProductPdf";
+import ProductGridSkeleton from "@/components/skeletons/ProductGridSkeleton";
+import GatedDownloadButton from "@/components/products/GatedDownloadButton";
 
 type Product = {
   id: string;
   title: string | null;
   slug: string | null;
-  description: string | null;
-  price_cents: number | null;
-  currency: string | null;
+  description?: string | null;
+  price_cents?: number | null;
+  currency?: string | null;
   cover_image_path: string | null;
   pdf_path: string | null;
   created_at: string;
@@ -23,76 +24,62 @@ export default function Home() {
   const [recent, setRecent] = useState<Product[]>([]);
   const [showSeeMore, setShowSeeMore] = useState(false);
   const [resourceCount, setResourceCount] = useState<number | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const { count, error: countErr } = await supabase
-        .from("products")
-        .select("id", { count: "exact", head: true })
-        .eq("is_active", true)
-        .eq("status", "published");
+      setLoading(true);
+      try {
+        const { count, error: countErr } = await supabase
+          .from("products")
+          .select("id", { count: "exact", head: true })
+          .eq("is_active", true)
+          .eq("status", "published");
 
-      if (countErr) {
-        console.error("Failed to load resource count:", countErr);
-        setResourceCount(null);
-      } else {
-        setResourceCount(count ?? 0);
-      }
-
-      const { data, error } = await supabase
-        .from("products")
-        .select("id,title,slug,cover_image_path,pdf_path,created_at,status,is_active")
-        .eq("is_active", true)
-        .eq("status", "published")
-        .order("created_at", { ascending: false })
-        .limit(15);
-
-      if (error) return;
-
-      const items = (data ?? []).map((p) => {
-        if (!p.cover_image_path) return { ...p, coverUrl: null };
-        const cleanPath = p.cover_image_path.replace(/^\/+/, "");
-        const { data: urlData } = supabase.storage
-          .from("product-covers")
-          .getPublicUrl(cleanPath);
-        const coverUrl = urlData.publicUrl;
-        if (process.env.NODE_ENV !== "production") {
-          console.log("[cover-debug]", {
-            title: p.title,
-            cover_image_path: p.cover_image_path,
-            cleanPath,
-            coverUrl,
-          });
+        if (countErr) {
+          console.error("Failed to load resource count:", countErr);
+          setResourceCount(null);
+        } else {
+          setResourceCount(count ?? 0);
         }
-        return { ...p, coverUrl };
-      });
 
-      setRecent(items);
-      setShowSeeMore(items.length > 10);
+        const { data, error } = await supabase
+          .from("products")
+          .select("id,title,slug,cover_image_path,pdf_path,created_at,status,is_active")
+          .eq("is_active", true)
+          .eq("status", "published")
+          .order("created_at", { ascending: false })
+          .limit(15);
+
+        if (error) return;
+
+        const items = (data ?? []).map((p) => {
+          if (!p.cover_image_path) return { ...p, coverUrl: null };
+          const cleanPath = p.cover_image_path.replace(/^\/+/, "");
+          const { data: urlData } = supabase.storage
+            .from("product-covers")
+            .getPublicUrl(cleanPath);
+          const coverUrl = urlData.publicUrl;
+          if (process.env.NODE_ENV !== "production") {
+            console.log("[cover-debug]", {
+              title: p.title,
+              cover_image_path: p.cover_image_path,
+              cleanPath,
+              coverUrl,
+            });
+          }
+          return { ...p, coverUrl };
+        });
+
+        setRecent(items);
+        setShowSeeMore(items.length > 10);
+      } finally {
+        setLoading(false);
+      }
     };
 
     load();
   }, [supabase]);
-
-  const handleDownload = async (product: Product) => {
-    if (!product.pdf_path || downloadingId === product.id) return;
-    setDownloadingId(product.id);
-
-    try {
-      const filename = `${product.slug || product.title || product.id}.pdf`;
-      await downloadProductPdf({
-        supabase,
-        pdfPath: product.pdf_path,
-        filename,
-      });
-    } catch (err) {
-      console.log("PDF download error", { pdf_path: product.pdf_path, error: err });
-      alert("Could not download file.");
-    } finally {
-      setDownloadingId(null);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -155,9 +142,11 @@ export default function Home() {
           const renderRow = (items: Product[]) => (
             <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-5">
               {items.map((product) => {
-                const title = product?.title ?? "Worksheet Title";
+                const title = product?.title ?? "Untitled resource";
                 const coverUrl = product?.coverUrl ?? null;
                 const slug = product?.slug ?? "";
+                const buttonClasses =
+                  "inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60";
                 return (
                   <ProductCard
                     key={product.id}
@@ -165,15 +154,15 @@ export default function Home() {
                     title={title}
                     slug={slug}
                     coverUrl={coverUrl}
-                    actionLabel={
-                      downloadingId === product.id
-                        ? "Preparing..."
-                        : product.pdf_path
-                          ? "Download"
-                          : "No file"
+                    actionElement={
+                      <GatedDownloadButton
+                        productId={product.id}
+                        slug={product.slug}
+                        pdfPath={product.pdf_path}
+                        title={title}
+                        className={buttonClasses}
+                      />
                     }
-                    actionDisabled={downloadingId === product.id || !product.pdf_path}
-                    onActionClick={product.pdf_path ? () => handleDownload(product) : undefined}
                   />
                 );
               })}
@@ -182,25 +171,20 @@ export default function Home() {
 
           return (
             <div className="space-y-6">
-              {row1.length > 0 ? (
+              {loading ? (
+                <ProductGridSkeleton
+                  count={10}
+                  className="grid-cols-2 md:grid-cols-3 xl:grid-cols-5"
+                />
+              ) : row1.length > 0 ? (
                 renderRow(row1)
               ) : (
-                <div className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-5">
-                  {Array.from({ length: 5 }).map((_, idx) => (
-                    <ProductCard
-                      key={`placeholder-${idx}`}
-                      id={`placeholder-${idx}`}
-                      title="Worksheet Title"
-                      slug=""
-                      coverUrl={null}
-                      actionLabel="Download"
-                      actionHref="/products"
-                    />
-                  ))}
+                <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                  No resources available yet.
                 </div>
               )}
-              {row2.length > 0 && renderRow(row2)}
-              {showSeeMore && (
+              {!loading && row2.length > 0 && renderRow(row2)}
+              {!loading && showSeeMore && (
                 <div className="flex justify-center pt-2">
                   <a
                     className="rounded-full border border-slate-300 px-5 py-2 text-sm text-slate-700 hover:bg-slate-100"
