@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { verifyAdminFromRequest } from "@/lib/admin/verifyAdmin";
 
+export const runtime = "nodejs";
+
 type Params = { params: Promise<{ id: string }> };
 
 const uuidRegex =

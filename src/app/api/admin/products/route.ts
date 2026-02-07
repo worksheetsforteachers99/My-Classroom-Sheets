@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { verifyAdminFromRequest } from "@/lib/admin/verifyAdmin";
 
+export const runtime = "nodejs";
+
 export async function GET(req: Request) {
   const admin = await verifyAdminFromRequest(req);
   if (!admin.ok) {
