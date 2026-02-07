@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const runtime = "nodejs";
+
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, ctx: Params) {
