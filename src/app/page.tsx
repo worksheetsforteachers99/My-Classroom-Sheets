@@ -87,7 +87,7 @@ export default function Home() {
       <section className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-14 md:grid-cols-[1.1fr_0.9fr] md:py-20">
         <div className="flex flex-col justify-center gap-6">
           <div className="text-4xl font-semibold leading-tight md:text-5xl">
-            Premium Quality Worksheets
+            Premium Quality Worksheetss
           </div>
           <div className="text-lg text-slate-600">
             Find premium printable worksheets by grade, subject, and topic. Instant PDF downloads.
